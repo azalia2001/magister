@@ -1,0 +1,49 @@
+import pandas as pd
+import geopandas as gpd
+!pip install iduedu
+from iduedu import get_4326_boundary
+
+bounds = get_4326_boundary(osm_id=1114902)
+from iduedu import get_intermodal_graph
+
+# Define a territory (use OSM relation id or a shapely polygon/geodataframe)
+G_intermodal = get_intermodal_graph(territory=bounds, clip_by_territory=False)
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+!pip install contextily
+import contextily as ctx
+
+EDGE_COLORS = {
+    "walk": "#72B7B2",
+    "boarding": "#9A9A9A",
+    "bus": "#4C78A8",
+    "trolleybus": "#F58518",
+    "tram": "#E45756",
+    "subway": "#2E7D32",
+}
+FALLBACK = "#444444"
+
+territory3857 = gpd.GeoDataFrame(geometry=[bounds], crs=4326).to_crs(3857)
+from iduedu import graph_to_gdf
+G_intermodal_gdf = graph_to_gdf(G_intermodal, nodes=False, restore_edge_geom=True)
+fig, ax = plt.subplots(figsize=(10, 10))
+minx, miny, maxx, maxy = territory3857.total_bounds
+dx, dy = (maxx - minx) * 0.05, (maxy - miny) * 0.05
+ax.set_xlim(minx - dx, maxx + dx)
+ax.set_ylim(miny - dy, maxy + dy)
+ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron)
+legend_handles = []
+present = set(G_intermodal_gdf["type"])
+for t in [t for t in EDGE_COLORS if t in present]:
+    sub = G_intermodal_gdf[G_intermodal_gdf["type"] == t].to_crs(3857)
+    if sub.empty:
+        continue
+    color = EDGE_COLORS.get(t, FALLBACK)
+    sub.plot(ax=ax, color=color, linewidth=0.5 if t == 'walk' else 1.4, alpha=0.95)
+    legend_handles.append(Line2D([0], [0], color=color, lw=3, label=t))
+if legend_handles:
+    ax.legend(handles=legend_handles, loc="upper right", frameon=True, title="edge type")
+ax.set_axis_off()
+ax.set_title("Intermodal graph", fontsize=16)
+plt.tight_layout()
+plt.show()
